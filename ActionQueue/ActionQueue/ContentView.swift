@@ -9,6 +9,38 @@
  7. Execute action
  8. Set flag actionInProgress to false
  9. Go back to step 4 until it empty
+ 
+ // MARK: Try to implement this game pause feature in consol
+ 
+ // Inside your GameState class
+ @Published var isGamePaused = false
+
+ // A helper function (can be placed in a utility file or extension)
+ func pauseableSleep(seconds: Double) async throws {
+	 // this small chunk faster than a single frame so user will see an actual pause
+	 let chunkSize = 0.05 // 50ms - small enough to feel instant on resume
+	 // this property we use to track how much time we slept
+	 var elapsed: Double = 0.0
+	 
+	 while elapsed < seconds {
+		 // 1. Check if we are paused - if so, wait indefinitely until unpaused
+		 while gameState.isGamePaused {
+			 // Sleep for 100ms while paused to keep the thread responsive
+			 try await Task.sleep(for: .milliseconds(100))
+			 // Check if the task was externally cancelled (e.g., user quit the battle)
+			 try Task.checkCancellation()
+		 }
+		 
+		 // 2. Sleep for the next chunk
+		 let remaining = seconds - elapsed
+		 let sleepTime = min(chunkSize, remaining)
+		 try await Task.sleep(for: .seconds(sleepTime))
+		 elapsed += sleepTime
+		 
+		 // 3. Allow cancellation
+		 try Task.checkCancellation()
+	 }
+ }
  */
 
 import SwiftUI
@@ -63,7 +95,7 @@ class ActionQueue {
 	
 	/// Method runs until queue will be empty
 	/// You do not need guard in execute/extract action because if it's empty it won't move further
-	func executeActions() {
+	func executeActions() async {
 		
 		print("Start Running the queue")
 		
@@ -75,7 +107,7 @@ class ActionQueue {
 				
 				let action = extractAction()
 				print("Passed action for execution")
-				executeSingleAction(action)
+				await executeSingleAction(action)
 			}
 		}
 	}
@@ -88,16 +120,20 @@ class ActionQueue {
 		queue.removeFirst()
 	}
 	
-	func executeSingleAction(_ action: Action) {
+	func executeSingleAction(_ action: Action) async {
 		
-		print("Execution started")
+		guard !actionInProgress else { return }
+		print("Execution started. actionInProgress - \(actionInProgress)")
 		actionInProgress = true
-		print("execution continue")
 		
-		DispatchQueue.main.asyncAfter(deadline: .now() + action.timeToCast) {
-			self.actionInProgress = false
-			print("action has been executed after \(action.timeToCast) seconds")
+		do {
+			try await Task.sleep(nanoseconds: 1_000_000_000)
+			print("In the middle")
+		} catch {
+			print("Has been canceled")
 		}
+		actionInProgress = false
+		print("Execution ends. actionInProgress - \(actionInProgress)")
 	}
 }
 
